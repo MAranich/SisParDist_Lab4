@@ -128,7 +128,7 @@ void init_points(struct Point* points, int num_points, int width, int height) {
 }
 
 
-__global__ void CC_pointsCUDA(struct Point* points) {
+__global__ void count_close_points_CUDA(struct Point* points) {
 
     int i = threadIdx.x; 
     int j = threadIdx.y; 
@@ -148,11 +148,13 @@ __global__ void CC_pointsCUDA(struct Point* points) {
 /*Wraper function to launch the CUDA kernel to count the close points*/
 void count_close_points_gpu(struct Point* points, int num_points) {
     
-    CC_pointsCUDA<<<num_points, num_points>>>(points); 
+    count_close_points_CUDA<<<num_points, num_points>>>(points); 
 
 }
 
-__global__ void del_Triang(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles) {
+
+__global__ void delaunay_triangulation_CUDA(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles) {
+
 
     int nt = 0; 
     struct Triangle triangle_new;
@@ -191,6 +193,7 @@ __global__ void del_Triang(struct Point* points, int num_points, struct Triangle
 /*Wraper function to launch the CUDA kernel to compute delaunay triangulation*/
 void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles) {
 
+
     int totalIters = num_points * num_points * num_points; // num_points**3
 
     int* d_num_tr; 
@@ -207,6 +210,10 @@ void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Tri
 
 }
 
+
+__global__ void save_triangulation_points_CUDA(struct Point* points) {
+    
+}
 
 /*Wraper function to launch the CUDA kernel to compute delaunay triangulation. 
 Remember to store an image of int's between 0 and 100, where points store 101, and empty areas -1, and points inside triangle the average of value */
