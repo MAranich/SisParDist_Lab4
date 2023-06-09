@@ -173,7 +173,9 @@ void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Tri
 }
 
 
-__global__ void save_triangulation_points_CUDA(struct Point* points) {}
+__global__ void save_triangulation_points_CUDA(struct Point* points) {
+    
+}
 
 /*Wraper function to launch the CUDA kernel to compute delaunay triangulation. 
 Remember to store an image of int's between 0 and 100, where points store 101, and empty areas -1, and points inside triangle the average of value */
