@@ -128,14 +128,38 @@ void init_points(struct Point* points, int num_points, int width, int height) {
 }
 
 
+__global__ void CC_pointsCUDA(struct Point* points) {
+
+    int i = threadIdx.x; 
+    int j = threadIdx.y; 
+    if(i < j){
+
+        if(distance(&points[i], &points[j]) <= 100){
+
+            points[i].value++;   //stores +1 in value
+            points[j].value++; 
+
+        }
+
+    }
+
+}
+
 /*Wraper function to launch the CUDA kernel to count the close points*/
 void count_close_points_gpu(struct Point* points, int num_points) {
     
+    CC_pointsCUDA<<<num_points, num_points>>>(points); 
+
 }
 
 
 /*Wraper function to launch the CUDA kernel to compute delaunay triangulation*/
 void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles) {
+    int nt = *num_triangles; 
+    struct Triangle triangle_new;
+    int inside = 0;
+
+
     
 }
 
