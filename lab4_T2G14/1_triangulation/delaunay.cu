@@ -152,15 +152,24 @@ void count_close_points_gpu(struct Point* points, int num_points) {
 
 }
 
+__global__ void del_Triang(struct Point* points, struct Triangle* triangles) {
 
-/*Wraper function to launch the CUDA kernel to compute delaunay triangulation*/
-void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles) {
-    int nt = *num_triangles; 
+    int nt = 0; 
     struct Triangle triangle_new;
     int inside = 0;
 
 
-    
+
+
+    return nt; 
+}
+
+/*Wraper function to launch the CUDA kernel to compute delaunay triangulation*/
+void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles) {
+
+    *num_triangles = del_Trinag(points, triangles); 
+
+
 }
 
 
