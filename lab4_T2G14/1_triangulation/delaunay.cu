@@ -152,23 +152,58 @@ void count_close_points_gpu(struct Point* points, int num_points) {
 
 }
 
-__global__ void del_Triang(struct Point* points, struct Triangle* triangles) {
+__global__ void del_Triang(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles) {
 
     int nt = 0; 
     struct Triangle triangle_new;
     int inside = 0;
 
+    int i = threadIdx.x / (num_points * num_ponits)
+    int j = (threadIdx.x / num_points) % num_points
+    int k = threadIdx.x % num_points; 
+
+    if(i < j && j < k) { //calculate triangle
+
+        triangle_new.p1 = points[i];
+        triangle_new.p2 = points[j];
+        triangle_new.p3 = points[k];
+
+        for(int p = 0; p < num_points; p++) {        
+            inside = inside_circle(&points[p], &triangle_new);     // result is 0 or 1  
+            if(inside) break;          
+        }
+
+        //#pragma acc wait                        //waits all previously queued work
+
+        if(inside == 0) {                       //if no other point is inside the triangle
+            atomicAdd_system(num_triangles, 1)
+
+            triangles[*num_triangles] = triangle_new;       //nt is updated after the assignation
+        } 
 
 
 
-    return nt; 
+    }
+
+    *num_triangles = nt; 
 }
 
 /*Wraper function to launch the CUDA kernel to compute delaunay triangulation*/
 void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles) {
 
-    *num_triangles = del_Trinag(points, triangles); 
+    int totalIters = num_points * num_points * num_points; // num_points**3
 
+    int* d_num_tr; 
+    //cudaMalloc(&d_num_tr, sizeof(int)); //to get back num_triangles
+
+    int* nt; 
+    cudaMallocManaged(&nt, 4)
+    *nt = 0; 
+    del_Trinag<<<totalIters>>>(points, num_points, triangles, nt); 
+
+    //cudaMemcpy(num_triangles, d_num_tr, sizeof(int), cudaMemcpyDeviceToHost)
+
+    //cudaFree(d_num_tr); 
 
 }
 
