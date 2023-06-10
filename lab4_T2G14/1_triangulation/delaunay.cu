@@ -168,8 +168,7 @@ void count_close_points_gpu(struct Point* points, int num_points) {
 
 __global__ void delaunay_triangulation_CUDA(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles) {
 
-    int nt = 0; 
-    int inside = 0;
+    int nt = 0; // <- creo que no sirve de nada
 
     int n_totalIter = threadIdx.x + blockIdx.x * blockDim.x; //numero de la iteracion global ("entre los 3 fors")
 
@@ -177,30 +176,28 @@ __global__ void delaunay_triangulation_CUDA(struct Point* points, int num_points
     int j = (n_totalIter / num_points) % num_points;
     int k = n_totalIter % num_points; 
 
-    if(i < j && j < k) { 
-        //calculate triangle
-        struct Triangle triangle_new;
+    if( !( i < j && j < k ) ) return; //if the conditions are NOT met, return
+    //calculate triangle
+    struct Triangle triangle_new;
 
-        triangle_new.p1 = points[i];
-        triangle_new.p2 = points[j];
-        triangle_new.p3 = points[k];
-
-        for(int p = 0; p < num_points; p++) {        
-            inside = inside_circle(&points[p], &triangle_new);     // result is 0 or 1 --> need to adapt it to use CUDA
-            if(inside) break;          
-        }
-
-        //#pragma acc wait                        //waits all previously queued work
-
-        if(inside == 0) {                       //if no other point is inside the triangle
-            atomicAdd_system(num_triangles, 1) //atomic add +1
-
-            triangles[*num_triangles] = triangle_new;       //nt is updated after the assignation
-        } 
-
-
-
+    triangle_new.p1 = points[i];
+    triangle_new.p2 = points[j];
+    triangle_new.p3 = points[k];
+    
+    int inside = 0;
+    for(int p = 0; p < num_points; p++) {        
+        inside = inside_circle(&points[p], &triangle_new);     // result is 0 or 1 --> need to adapt it to use CUDA
+        if(inside) break;          
     }
+    //#pragma acc wait                        //waits all previously queued work
+
+    if(inside == 0) {                       //if no other point is inside the triangle
+        triangles[*num_triangles] = triangle_new;       //nt is updated after the assignation
+
+        atomicAdd_system(num_triangles, 1) //atomic add +1
+
+    } 
+
 
 }
 
