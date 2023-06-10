@@ -240,14 +240,17 @@ void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Tri
 
 
     //Display some info and print some of the triangles
-    int rnd = 5; //bad pseudoransom number generator
-    printf("delaunay_triangulation_gpu finalized. Created %d triangles (neg number = error) \n", *num_triangles)
-    for(rnd = 5; rnd < *num_triangles; rnd += 20 + (rnd * 73)%29) { //print some of the triangles
-        printf("Triangle %d : [(%lf, %lf) (%lf, %lf) (%lf, %lf)] \n", rnd
-        triangles[rnd].p1.x, triangles[rnd].p1.y,
-        triangles[rnd].p2.x, triangles[rnd].p2.y,
-        triangles[rnd].p3.x, triangles[rnd].p3.y);   
-    }
+    if(0 <= h_nt){
+        int rnd = 5; //bad pseudoransom number generator
+        printf("delaunay_triangulation_gpu finalized. Created %d triangles (neg number = error) \n", *num_triangles)
+        for(rnd = 5; rnd < *num_triangles; rnd += 20 + (rnd * 73)%29) { //print some of the triangles
+            printf("Triangle %d : [(%lf, %lf) (%lf, %lf) (%lf, %lf)] \n", rnd
+            triangles[rnd].p1.x, triangles[rnd].p1.y,
+            triangles[rnd].p2.x, triangles[rnd].p2.y,
+            triangles[rnd].p3.x, triangles[rnd].p3.y);   
+        }
+    } else printf("There has been an error with d_nt or h_nt variables. h_nt = %d \n", h_nt); 
+
 
 }
 
