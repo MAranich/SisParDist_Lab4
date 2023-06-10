@@ -139,7 +139,6 @@ __global__ void count_close_points_CUDA(struct Point* points) {
         if(distance(&points[i], &points[j]) <= 100){
             points[i].value++;                          //stores +1 in value
             points[j].value++; 
-
         }
     }
 
@@ -152,14 +151,14 @@ void count_close_points_gpu(struct Point* points, int num_points) {
     struct Point* cudaPoints;
 
     //allocate memory in the gpu
-    cudaMalloc(&cudaPoints, sizeof(points));
+    cudaMalloc(&cudaPoints, sizeof(struct Point) * num_points);
 
     //copy memory into the gpu
-    cudaMemcpy(cudaPoints, points, sizeof(points), cudaMemcpyHostToDevice);          //we transfer it from CPU -> GPU
+    cudaMemcpy(cudaPoints, points, sizeof(struct Point) * num_points, cudaMemcpyHostToDevice);          //we transfer it from CPU -> GPU
 
     count_close_points_CUDA<<<num_points, num_points>>>(points);                     //(dimGrid, dimBlock) we want to iterate over every pair
     
-    cudaMemcpy(points, cudaPoints, sizeof(points), cudaMemcpyDeviceToHost);          //we transfer it from GPU -> CPU
+    cudaMemcpy(points, cudaPoints, sizeof(struct Point) * num_points, cudaMemcpyDeviceToHost);          //we transfer it from GPU -> CPU
 
     //deallocate
     cudaFree(&cudaPoints);
@@ -167,61 +166,65 @@ void count_close_points_gpu(struct Point* points, int num_points) {
 }
 
 
-// __global__ void delaunay_triangulation_CUDA(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles) {
+__global__ void delaunay_triangulation_CUDA(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles) {
 
-//     int nt = 0; 
-//     struct Triangle triangle_new;
-//     int inside = 0;
+    int nt = 0; 
+    int inside = 0;
 
-//     int i = threadIdx.x / (num_points * num_ponits);
-//     int j = (threadIdx.x / num_points) % num_points;
-//     int k = threadIdx.x % num_points; 
+    int n_totalIter = threadIdx.x + blockIdx.x * blockDim.x; //numero de la iteracion global ("entre los 3 fors")
 
-//     if(i < j && j < k) { //calculate triangle
+    int i = n_totalIter / (num_points * num_ponits); //recupera i, j y k
+    int j = (n_totalIter / num_points) % num_points;
+    int k = n_totalIter % num_points; 
 
-//         triangle_new.p1 = points[i];
-//         triangle_new.p2 = points[j];
-//         triangle_new.p3 = points[k];
+    if(i < j && j < k) { 
+        //calculate triangle
+        struct Triangle triangle_new;
 
-//         for(int p = 0; p < num_points; p++) {        
-//             inside = inside_circle(&points[p], &triangle_new);     // result is 0 or 1 --> need to adapt it to use CUDA
-//             if(inside) break;          
-//         }
+        triangle_new.p1 = points[i];
+        triangle_new.p2 = points[j];
+        triangle_new.p3 = points[k];
 
-//         //#pragma acc wait                        //waits all previously queued work
+        for(int p = 0; p < num_points; p++) {        
+            inside = inside_circle(&points[p], &triangle_new);     // result is 0 or 1 --> need to adapt it to use CUDA
+            if(inside) break;          
+        }
 
-//         if(inside == 0) {                       //if no other point is inside the triangle
-//             atomicAdd_system(num_triangles, 1)
+        //#pragma acc wait                        //waits all previously queued work
 
-//             triangles[*num_triangles] = triangle_new;       //nt is updated after the assignation
-//         } 
+        if(inside == 0) {                       //if no other point is inside the triangle
+            atomicAdd_system(num_triangles, 1) //atomic add +1
 
-
-
-//     }
-
-//     *num_triangles = nt; 
-// }
-
-// /*Wraper function to launch the CUDA kernel to compute delaunay triangulation*/
-// void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles) {
+            triangles[*num_triangles] = triangle_new;       //nt is updated after the assignation
+        } 
 
 
-//     int totalIters = num_points * num_points * num_points; // num_points**3
 
-//     int* d_num_tr; 
-//     //cudaMalloc(&d_num_tr, sizeof(int)); //to get back num_triangles
+    }
 
-//     int* nt; 
-//     cudaMallocManaged(&nt, 4)
-//     *nt = 0; 
-//     del_Trinag<<<totalIters>>>(points, num_points, triangles, nt); 
+    //*num_triangles = nt; 
+}
 
-//     //cudaMemcpy(num_triangles, d_num_tr, sizeof(int), cudaMemcpyDeviceToHost)
+/*Wraper function to launch the CUDA kernel to compute delaunay triangulation*/
+void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles) {
 
-//     //cudaFree(d_num_tr); 
 
-// }
+
+    struct Point* cudaPoints;
+    cudaMalloc(&cudaPoints, sizeof(points));
+    cudaMemcpy(cudaPoints, points, sizeof(points), cudaMemcpyHostToDevice); //data transfer
+
+    int totalIters = num_points * num_points * num_points; // num_points**3
+
+    int* nt; 
+    cudaMallocManaged(&nt, 4); //allocate int
+    *nt = 0; 
+
+    del_Trinag<<<totalIters>>>(points, num_points, triangles, nt); 
+
+
+
+}
 
 
 // __global__ void save_triangulation_points_CUDA(struct Point* points) {
