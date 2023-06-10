@@ -380,6 +380,13 @@ void printCudaInfo() {
 extern "C" int delaunay(int num_points, int width, int height) {
     printCudaInfo();
     
+
+    cudaEvent_t start, stop; //create events
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    float milliseconds = 0; 
+    float TotalTime = 0; 
+
     double start, end;
 
     max_num_triangles = num_points*30;
@@ -389,26 +396,36 @@ extern "C" int delaunay(int num_points, int width, int height) {
     
     init_points(points, num_points, width, height);
 
-    //start = omp_get_wtime();                            //we need to use cudaEvent
-    count_close_points_gpu(points, num_points);
-    //end = omp_get_wtime();
-    
-    printf("Counting close points: %f\n", end-start);
+    cudaEventRecord(start);
+    count_close_points_gpu(points, num_points); //<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    cudaEventRecord(stop);
+
+    cudaEventElapsedTime(&milliseconds, start, stop); //retrive time
+    TotalTime += milliseconds; 
+    printf("Counting close points: %f\n", milliseconds / 1000);
 
     int num_triangles = 0;
-    //start = omp_get_wtime();
-    //delaunay_triangulation_gpu(points, num_points, triangles, &num_triangles);
-    //end = omp_get_wtime();
-    printf("Delaunay triangulation: %f\n", end-start);
+    cudaEventRecord(start);
+    delaunay_triangulation_gpu(points, num_points, triangles, &num_triangles); //<<<<<<<<<<<<<<<<<<<<<<<<<<
+    cudaEventRecord(stop);
+
+    cudaEventElapsedTime(&milliseconds, start, stop); //retrive time
+    TotalTime += milliseconds; 
+    printf("Delaunay triangulation: %f\n", milliseconds / 1000);
 
     printf("Number of generated triangles = %d\n", num_triangles);
     //print_triangles(triangles, num_triangles);
 
-    //start = omp_get_wtime();
-    //cudaEventRecord(start);
-    //save_triangulation_image_gpu(points, num_points, triangles, num_triangles, width, height);
-    //end = omp_get_wtime();
-    printf("Generate image: %f\n", end-start);
+    cudaEventRecord(start);
+    save_triangulation_image_gpu(points, num_points, triangles, num_triangles, width, height); //<<<<<<<<<<<
+    cudaEventRecord(stop);
+    
+    cudaEventElapsedTime(&milliseconds, start, stop); //retrive time
+    TotalTime += milliseconds; 
+    printf("Generate image: %f\n", milliseconds / 1000);
+
+    printf("Total Time: %f\n", TotalTime / 1000);
+
 
     //Free memory
     free(points);
