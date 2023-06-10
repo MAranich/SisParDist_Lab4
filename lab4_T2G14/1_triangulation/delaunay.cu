@@ -156,12 +156,12 @@ void count_close_points_gpu(struct Point* points, int num_points) {
     //copy memory into the gpu
     cudaMemcpy(cudaPoints, points, sizeof(struct Point) * num_points, cudaMemcpyHostToDevice);          //we transfer it from CPU -> GPU
 
-    count_close_points_CUDA<<<num_points, num_points>>>(points);                     //(dimGrid, dimBlock) we want to iterate over every pair
+    count_close_points_CUDA<<<num_points, num_points>>>(cudaPoints);                     //(dimGrid, dimBlock) we want to iterate over every pair
     
     cudaMemcpy(points, cudaPoints, sizeof(struct Point) * num_points, cudaMemcpyDeviceToHost);          //we transfer it from GPU -> CPU
 
     //deallocate
-    cudaFree(&cudaPoints);
+    cudaFree(cudaPoints);
 
 }
 
@@ -202,7 +202,6 @@ __global__ void delaunay_triangulation_CUDA(struct Point* points, int num_points
 
     }
 
-    //*num_triangles = nt; 
 }
 
 /*Wraper function to launch the CUDA kernel to compute delaunay triangulation*/
@@ -210,43 +209,69 @@ void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Tri
 
 
 
-    struct Point* cudaPoints;
-    cudaMalloc(&cudaPoints, sizeof(points));
-    cudaMemcpy(cudaPoints, points, sizeof(points), cudaMemcpyHostToDevice); //data transfer
+    struct Point* cudaPoints; //ptr GPU
+    cudaMalloc(&cudaPoints, sizeof(struct Point) * num_points); //allocate space
+    cudaMemcpy(cudaPoints, points, sizeof(struct Point) * num_points, cudaMemcpyHostToDevice); //data transfer
+
+    //repeat for triangles
+    struct Triangle* cudaTriangle; //ptr GPU
+    cudaMalloc(&cudaTriangle, sizeof(struct Triangle) * num_points * 30); //allocate space//in prevois lab, max triangles were num_poits * 30 (or so)
+    //no need to copy memory, since the info will be creathed there
 
     int totalIters = num_points * num_points * num_points; // num_points**3
 
-    int* nt; 
-    cudaMallocManaged(&nt, 4); //allocate int
-    *nt = 0; 
+    int* d_nt; //device num triangles
+    int h_nt = -3550000; // host num triangles//pongo este numero para detectar posibles errores
+    cudaMallocManaged(&d_nt, sizeof(int)); //allocate int//lo hago con el managed porque en el tuto lo hacia así. 
+    *d_nt = 0; //no sé si esto funciona pero estava en el tuto
 
-    del_Trinag<<<totalIters>>>(points, num_points, triangles, nt); 
+    delaunay_triangulation_CUDA<<<totalIters>>>(cudaPoints, num_points, cudaTriangle, nt); 
+    //Syncronitzation (?)
+
+    cudaMemcpy(d_nt, &h_nt, sizeof(int), cudaMemcpyHostToDevice); //retrive nt (?)
 
 
+    //no need to retrive points since they are not affected
+    cudaMemcpy(cudaTriangle, triangles, sizeof(struct Triangle) * h_nt, cudaMemcpyHostToDevice); //retrive only the necessary triangles
+
+    *num_triangles = h_nt; //save the value of 
+    cudaFree(cudaPoints);
+    cudaFree(cudaTriangle);
+
+
+    //Display some info and print some of the triangles
+    int rnd = 5; //bad pseudoransom number generator
+    printf("delaunay_triangulation_gpu finalized. Created %d triangles (neg number = error) \n", *num_triangles)
+    for(rnd = 5; rnd < *num_triangles; rnd += 20 + (rnd * 73)%29) { //print some of the triangles
+        printf("Triangle %d : [(%lf, %lf) (%lf, %lf) (%lf, %lf)] \n", rnd
+        triangles[rnd].p1.x, triangles[rnd].p1.y,
+        triangles[rnd].p2.x, triangles[rnd].p2.y,
+        triangles[rnd].p3.x, triangles[rnd].p3.y);   
+    }
 
 }
 
 
-// __global__ void save_triangulation_points_CUDA(struct Point* points) {
+__global__ void save_triangulation_points_CUDA(struct Point* points) {
     
-// }
+}
 
-// /*Wraper function to launch the CUDA kernel to compute delaunay triangulation. 
-// Remember to store an image of int's between 0 and 100, where points store 101, and empty areas -1, and points inside triangle the average of value */
-// void save_triangulation_image_gpu(struct Point* points, int num_points, struct Triangle* triangles, int num_triangles, int width, int height) {
-//     //create structures
-//     double* image = (double *) malloc(sizeof(double)*width*height); 
+/*Wraper function to launch the CUDA kernel to compute delaunay triangulation. 
+Remember to store an image of int's between 0 and 100, where points store 101, and empty areas -1, and points inside triangle the average of value */
+void save_triangulation_image_gpu(struct Point* points, int num_points, struct Triangle* triangles, int num_triangles, int width, int height) {
+    //create structures
+    double* image = (double *) malloc(sizeof(double)*width*height); 
 
 
 
     
-//     //write image
-//     save_image("image.txt", width, height, image);
+    //write image
+    save_image("image.txt", width, height, image);
 
-//     //free structures
-//     free(image);
+    //free structures
+    free(image);
     
-// }
+}
 
 void printCudaInfo() {
     int devNo = 0;
