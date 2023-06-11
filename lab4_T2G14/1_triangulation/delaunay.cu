@@ -149,6 +149,7 @@ __global__ void count_close_points_CUDA(struct Point* points, int num_points) {
     double dis;
     int i = threadIdx.x + blockIdx.x * blockDim.x; 
     int j = threadIdx.y + blockIdx.y * blockDim.y; 
+
     printf("Indexes: i:%d and j:%d\n", threadIdx.x, threadIdx.y);
 
     if(i < j){
@@ -177,16 +178,21 @@ void count_close_points_gpu(struct Point* points, int num_points) {
     cudaMemcpy(d_points, points, sizeof(struct Point) * num_points, cudaMemcpyHostToDevice);          //we transfer it from CPU -> GPU
 
     printf("Num points: %d \n", num_points);
-    if(num_points <= 1024){
+    
+    //en una dim
+    /*if(num_points <= 1024){
         dim_grid = 1;
         dim_block = num_points;
     }else{
-        dim_grid = ceil((double)(num_points/1024));
+        dim_grid = ceil((double)(num_points/1024));             // 32 x 32 = 1024
         dim_block = 1024;
-    }
+    }*/
+    
+    //en 2 dimensiones
+    dim_grid = ceil((double)(num_points/1024));             // 32 x 32 = 1024
 
-    dim3 dimGrid(dim_grid);
-    dim3 dimBlock(dim_block);
+    dim3 dimGrid((num_points+31)/3);        //?????????????
+    dim3 dimBlock(32, 32);
 
     printf("DimGrid: %d DimBlock: %d \n", dim_grid, dim_block);
 
@@ -461,4 +467,3 @@ extern "C" int delaunay(int num_points, int width, int height) {
 
     return 0;
 }
-    
