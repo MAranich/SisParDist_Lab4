@@ -137,23 +137,34 @@ void init_points(struct Point* points, int num_points, int width, int height) {
 ///
 /////////////////////////////////////////////
 
+__device__ double distance_CUDA(struct Point * p1, struct Point * p2) {
+    double dx = (*p1).x - (*p2).x;
+    double dy = (*p1).y - (*p2).y;
+    return sqrt(dx*dx + dy*dy);
+}
 
 /*Kernel function: to be executed on the device and launched from the host*/
 __global__ void count_close_points_CUDA(struct Point* points) {
+    double dis;
 
     int i = threadIdx.x + blockIdx.x * blockDim.x; 
     int j = threadIdx.y + blockIdx.y * blockDim.y; 
+
     if(i < j){
-        if(distance(&points[i], &points[j]) <= 100){
+        dis = distance_CUDA(&points[i], &points[j]);
+        if(dis <= 100){
             points[i].value++;                          //stores +1 in value
             points[j].value++; 
         }
     }
 
+
 }
 
 /*Wraper function to launch the CUDA kernel to count the close points*/
 void count_close_points_gpu(struct Point* points, int num_points) {
+    int dim_grid = 0;                       //num_blocks
+    int dim_block = 0;                      //threads/block
 
     //create pointer into the gpu
     struct Point* cudaPoints;
@@ -164,7 +175,18 @@ void count_close_points_gpu(struct Point* points, int num_points) {
     //copy memory into the gpu
     cudaMemcpy(cudaPoints, points, sizeof(struct Point) * num_points, cudaMemcpyHostToDevice);          //we transfer it from CPU -> GPU
 
-    count_close_points_CUDA<<<num_points, num_points>>>(cudaPoints);                     //(dimGrid, dimBlock) we want to iterate over every pair
+    if(num_points < 1024){
+        dim_grid = 1;
+        dim_block = num_points;
+    }else{
+        dim_grid = ceil((double)(num_points/1024));
+        dim_block = 1024;
+    }
+
+    dim3 dimGrid(dim_grid);
+    dim3 dimBlock(dim_grid);
+
+    count_close_points_CUDA<<<dimGrid, dimBlock>>>(cudaPoints);                     //(dimGrid, dimBlock) we want to iterate over every pair
     
     cudaMemcpy(points, cudaPoints, sizeof(struct Point) * num_points, cudaMemcpyDeviceToHost);          //we transfer it from GPU -> CPU
 
@@ -172,6 +194,7 @@ void count_close_points_gpu(struct Point* points, int num_points) {
     cudaFree(cudaPoints);
 
 }
+
 
 
 __global__ void delaunay_triangulation_CUDA(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles) {
