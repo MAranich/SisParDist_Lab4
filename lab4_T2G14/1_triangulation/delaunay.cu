@@ -5,6 +5,7 @@
 #include "cuda.h"
 
 #define pixel(i, j, w)  (((j)*(w)) +(i))
+#define THREADSPERBLOCK 1024
 
 int max_num_triangles;
 #define B 16
@@ -146,19 +147,25 @@ __device__ double distance_CUDA(struct Point * p1, struct Point * p2) {
 
 /*Kernel function: to be executed on the device and launched from the host*/
 __global__ void count_close_points_CUDA(struct Point* points, int num_points) {
-    double dis;
-    int i = threadIdx.x + blockIdx.x * blockDim.x; 
-    int j = threadIdx.y + blockIdx.y * blockDim.y; 
+    
+    int id = threadIdx.x + blockIdx.x * blockDim.x; // get gloval iter
 
-    printf("Indexes: i:%d and j:%d\n", threadIdx.x, threadIdx.y);
+    if(id <= num_points * num_points) return; 
 
-    if(i < j){
-        dis = distance_CUDA(&points[i], &points[j]);
-        if(dis <= 100){
-            points[i].value++;                          //stores +1 in value
-            points[j].value++; 
-        }
+    int i = (id / num_points)%num_points; 
+    int j = id%num_points; 
+
+    //printf("Indexes: i:%d and j:%d\n", threadIdx.x, threadIdx.y);
+    printf("Indexes: i:%d and j:%d, total iter: %d = %d\n", i, j, id, i * num_points + j);
+
+    if( !(i < j) ) return; 
+
+    double dis = distance_CUDA(&points[i], &points[j]);
+    if(dis <= 100){
+        points[i].value++;                          //stores +1 in value
+        points[j].value++; 
     }
+    
 
 
 }
@@ -180,16 +187,16 @@ void count_close_points_gpu(struct Point* points, int num_points) {
     printf("Num points: %d \n", num_points);
     
     //en una dim
-    /*if(num_points <= 1024){
+    /*if(num_points <= THREADSPERBLOCK){
         dim_grid = 1;
         dim_block = num_points;
     }else{
         dim_grid = ceil((double)(num_points/1024));             // 32 x 32 = 1024
-        dim_block = 1024;
+        dim_block = THREADSPERBLOCK;
     }*/
-    
+    /*
     //en 2 dimensiones
-    dim_grid = ceil((double)(num_points/1024));             // 32 x 32 = 1024
+    dim_grid = ceil((double)(num_points/THREADSPERBLOCK));             // 32 x 32 = 1024
 
     dim3 dimGrid((num_points+31)/3);        //?????????????
     dim3 dimBlock(32, 32);
@@ -197,7 +204,12 @@ void count_close_points_gpu(struct Point* points, int num_points) {
     printf("DimGrid: %d DimBlock: %d \n", dim_grid, dim_block);
 
     count_close_points_CUDA<<<dimGrid, dimBlock>>>(d_points, num_points);                     //(dimGrid, dimBlock) we want to iterate over every pair
-    
+    */
+
+    int n_blocks = (int)ceil(((double)num_points * num_points)/THREADSPERBLOCK)
+    count_close_points_CUDA<<<n_blocks, THREADSPERBLOCK>>>(d_points, num_points);                     //(dimGrid, dimBlock) we want to iterate over every pair
+
+
     cudaMemcpy(points, d_points, sizeof(struct Point) * num_points, cudaMemcpyDeviceToHost);          //we transfer it from GPU -> CPU
 
     //deallocate
