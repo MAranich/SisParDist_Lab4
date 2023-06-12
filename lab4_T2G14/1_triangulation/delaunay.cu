@@ -131,6 +131,36 @@ void init_points(struct Point* points, int num_points, int width, int height) {
     }
 }
 
+/* Function to calculate the Delaunay Triangulation of a set of points */
+void delaunay_triangulation(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles) {
+    /* Iterate over every possible triangle defined by three points */
+    struct Triangle triangle_new;
+    int inside = 0; 
+
+    for(int i = 0; i < num_points; i++) {
+        triangle_new.p1 = points[i];
+
+        for(int j = i + 1; j < num_points; j++) {
+            triangle_new.p2 = points[j];
+
+            for(int k = j + 1; k < num_points; k++) {
+
+                triangle_new.p3 = points[k];              
+
+                for(int p = 0; p < num_points; p++){          //now we see if there is a point inside the circle                
+                    inside = inside_circle(&points[p], &triangle_new); // result is 0 or 1
+                    if(inside) break;
+                }
+
+                if(inside == 0) { //if no other point is inside the triangle
+                    triangles[*num_triangles] = triangle_new; 
+                    (*num_triangles)++;                 //update the counter
+                } 
+            }
+        }
+    }
+
+}
 
 /////////////////////////////////////////////
 ///
@@ -306,7 +336,7 @@ void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Tri
     dim3 dimBlock(THREADSPERBLOCK);
 
 
-    delaunay_triangulation_CUDA<<<dim_grid, THREADSPERBLOCK>>>(d_points, num_points, d_triangles, d_nt);      //entiendo que falta el block_size(?)
+    delaunay_triangulation_CUDA<<<dimGrid, dimBlock>>>(d_points, num_points, d_triangles, d_nt);      //entiendo que falta el block_size(?)
     //Syncronization (?)
 
     cudaMemcpy(&h_nt, d_nt, sizeof(int), cudaMemcpyDeviceToHost);                               ////data transfer GPU -> CPU
@@ -421,20 +451,23 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
     //usamos un thread en la gpu por pixel
     int dim_grid = (int)ceil(((double)size)/THREADSPERBLOCK);                       //num of blocks
 
-    dim3 dimGrid(dim_grid);
-    dim3 dimBlock(THREADSPERBLOCK);
+    dim3 dimGrid1(dim_grid);
+    dim3 dimBlock1(THREADSPERBLOCK);
 
-    save_triangulation_points_CUDA<<<dim_grid, THREADSPERBLOCK>>>(d_points, num_points, d_triangles, &num_triangles, d_image, width, height);                                
+    save_triangulation_points_CUDA<<<dimGrid1, dimBlock1>>> (d_points, num_points, d_triangles, &num_triangles, d_image, width, height);                                
 
     //wait for next kernel
     //keep image in gpu, no need to move it
     //also keep points there
 
+    cudaDeviceSynchronize();
+
     dim_grid = (int)ceil(((double)num_points)/THREADSPERBLOCK); 
     
-    dim3 dimGrid(dim_grid);
+    dim3 dimGrid2(dim_grid);
+    dim3 dimBlock2(THREADSPERBLOCK);
 
-    save_BlackBox_CUDA<<<dim_grid, THREADSPERBLOCK>>>(d_points, num_points, d_image, width, height); 
+    save_BlackBox_CUDA<<<dimGrid2, dimBlock2>>> (d_points, num_points, d_image, width, height); 
 
     cudaMemcpy(image, d_image, sizeof(double) * size, cudaMemcpyDeviceToHost); //retrive image
 
@@ -457,6 +490,65 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
     free(image);
     
 }
+
+/* Function to store an image of int's between 0 and 100, where points store -1, and empty areas -2, 
+and points inside triangle the average value */
+void save_triangulation_image(struct Point* points, int num_points, struct Triangle* triangles, int num_triangles, int width, int height) {
+    int size = width * height;
+    struct Point pixel, *point;
+    struct Triangle* tr = NULL; 
+    double disx, disy;
+    double alpha, beta, gamma;
+    double* image = (double*) malloc(sizeof(double)*size);
+    int inside = 0;    
+    
+    pixel.value = 0;
+
+
+    for(int j = 0; j < height; j++){ 
+
+        pixel.y = (double)j;
+
+        for(int i = 0; i < width; i++){            //por cada pixel
+            pixel.x = (double)i;
+
+            image[pixel(i, j, width)] = -1;                    //init pixel
+            //pixel falls within a triangle?
+            for(int k = 0; k < num_triangles; k++){             //recorre todos los triangulos
+                tr = &triangles[k]; 
+                inside = inside_triangle(tr, &pixel);
+                if(inside){
+                    barycentric_coordinates(tr, &pixel, &alpha, &beta, &gamma); 
+                    image[pixel(i, j, width)] = tr->p1.value * alpha + tr->p2.value * beta + tr->p3.value * gamma;   //sets new value
+                    break;
+                }
+            }
+
+            //square of size 5
+            for(int k = 0; k < num_points; k++) { //overrides previous decision if necessary
+                point = &points[k];
+                disx = abs(point->x - pixel.x);
+                disy = abs(point->y - pixel.y);
+
+                //printf("The distances are: %lf and %lf. So:%d \n", disx, disy, disx<=2.5);
+                if(disx <= 2.5 && disy <= 2.5) {             //pixel is inside square
+                    image[(pixel(i, j, width))] = 101.0;
+                    break;
+                }
+            }
+        }
+           
+    }
+    //write image
+    save_image("image.txt", width, height, image);
+    
+    //printf("Abracadabra. \n"); 
+
+    //free memory
+    free(image);      
+}
+
+
 
 void printCudaInfo() {
     int devNo = 0;
@@ -504,7 +596,7 @@ extern "C" int delaunay(int num_points, int width, int height) {
 
     int num_triangles = 0;
     cudaEventRecord(start);
-    delaunay_triangulation_gpu(points, num_points, triangles, &num_triangles);
+    delaunay_triangulation(points, num_points, triangles, &num_triangles);
     cudaEventRecord(stop);
 
     cudaEventSynchronize(stop);
@@ -516,7 +608,7 @@ extern "C" int delaunay(int num_points, int width, int height) {
     //print_triangles(triangles, num_triangles);
 
     cudaEventRecord(start);
-    save_triangulation_image_gpu(points, num_points, triangles, num_triangles, width, height);
+    save_triangulation_image(points, num_points, triangles, num_triangles, width, height);
     cudaEventRecord(stop);
 
     cudaEventSynchronize(stop);
