@@ -293,7 +293,7 @@ void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Tri
     dim3 dimGrid(dim_grid);
     dim3 dimBlock(dim_block);
     */
-    int n_blocks = (int)ceil(((double)num_points * num_points * num_points)/THREADSPERBLOCK); 
+    int n_blocks = (int)ceil(((double)totalIters)/THREADSPERBLOCK); 
 
     delaunay_triangulation_CUDA<<<n_blocks, THREADSPERBLOCK>>>(d_points, num_points, d_triangles, d_nt);      //entiendo que falta el block_size(?)
     //Syncronization (?)
@@ -324,64 +324,71 @@ void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Tri
 }
 
 
-// __global__ void save_triangulation_points_CUDA(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles, double* image, int width, int height) {
+__global__ void save_triangulation_points_CUDA(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles, double* image, int width, int height) {
     
-//     int i = threadIdx.x + blockIdx.x * blockDim.x; //get position of pixel
-//     int j = threadIdx.y + blockIdx.y * blockDim.y; 
-
-//     //declare vars
-//     int inside = 0;
-//     struct Point pixel, *point;
-//     struct Triangle* tr = NULL; 
-//     double alpha, beta, gamma;
-
-//     pixel.x = (double)i; 
-//     pixel.y = (double)j; 
-//     pixel.value = 0;
-
-//     image[pixel(i, j, width)] = -1; //set deafult value
-
-
-//     for(int k = 0; k < num_triangles; k++){             //recorre todos los triangulos
-//         tr = &triangles[k]; 
-//         barycentric_coordinates(tr, &pixel, &alpha, &beta, &gamma); 
-//         if(0 < alpha && 0 < beta && 0 < gamma){ //if inside triangle
-//             image[pixel(i, j, width)] = tr->p1.value * alpha + tr->p2.value * beta + tr->p3.value * gamma;   //sets new value
-//             break; // podria ser un return
-//         }
-//     }
-
-
-
-// }
-
-// __global__ void save_BlackBox_CUDA(struct Point* points, int num_points, double* image, int width, int height) {
-
-//     int k = threadIdx.x + blockIdx.x * blockDim.x; 
-
-//     int _x = points[k].x; //get coord of point
-//     int _y = points[k].y; 
+    int id = threadIdx.x + blockIdx.x * blockDim.x; //get position of pixel
     
-//     int radius = 2; // Total size = (2 * radius + 1)^2
+    if(width * height <= id) return; 
 
-//     //square of size 5
+    int i = id / width; //get i and j
+    int j = id % width; 
 
-//     for(int i = _x - radius;  i <= _x + radius; i++) { //in a box
-//         for(int j = _y - radius; j <= _y + radius; j++) {
-//             if(0 <= i && 0 <= j && i < width && j < height) { //if possible
-//                 image[(pixel(i, j, width))] = 101.0; //draw black pixel
-//             }
-//         }
-//     }
+    //declare vars
+    //int inside = 0;
+    struct Point pixel; 
+    //struct Point* point;
+    struct Triangle* tr = NULL; 
+    double alpha, beta, gamma;
 
-// }
+    pixel.x = (double)i; 
+    pixel.y = (double)j; 
+    pixel.value = 0;
+
+    image[pixel(i, j, width)] = -1; //set deafult value
+
+
+    for(int k = 0; k < num_triangles; k++){             //recorre todos los triangulos
+        tr = &triangles[k]; 
+        barycentric_coordinates(tr, &pixel, &alpha, &beta, &gamma); 
+        if(0 < alpha && 0 < beta && 0 < gamma){ //if inside triangle
+            image[pixel(i, j, width)] = tr->p1.value * alpha + tr->p2.value * beta + tr->p3.value * gamma;   //sets new value
+            break; // podria ser un return
+        }
+    }
+
+
+
+}
+
+__global__ void save_BlackBox_CUDA(struct Point* points, int num_points, double* image, int width, int height) {
+
+    int k = threadIdx.x + blockIdx.x * blockDim.x; 
+    
+    if(num_points <= k) return; 
+
+    int _x = points[k].x; //get coord of point
+    int _y = points[k].y; 
+    
+    int radius = 2; // Total size = (2 * radius + 1)^2
+
+    //square of size 5
+
+    for(int i = _x - radius;  i <= _x + radius; i++) { //in a box
+        for(int j = _y - radius; j <= _y + radius; j++) {
+            if(0 <= i && 0 <= j && i < width && j < height) { //if possible
+                image[(pixel(i, j, width))] = 101.0; //draw black pixel
+            }
+        }
+    }
+
+}
 
 
 
 /*Wraper function to launch the CUDA kernel to compute delaunay triangulation. 
 Remember to store an image of int's between 0 and 100, where points store 101, and empty areas -1, and points inside triangle the average of value */
 
-/*
+
 void save_triangulation_image_gpu(struct Point* points, int num_points, struct Triangle* triangles, int num_triangles, int width, int height) {
     
     //create structures
@@ -403,7 +410,9 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
     //data created in gpu
 
     //usamos un thread en la gpu por pixel
-    save_triangulation_points_CUDA<<<width, height>>>(cudaPoints, num_points, cudaTriangles, num_triangles, cudaImage, width, height);                                
+    int n_blocks = (int)ceil(((double)size)/THREADSPERBLOCK); 
+
+    save_triangulation_points_CUDA<<<n_blocks, THREADSPERBLOCK>>>(cudaPoints, num_points, cudaTriangles, num_triangles, cudaImage, width, height);                                
 
     cudaFree(cudaTriangles); //not needed anymore
 
@@ -411,7 +420,9 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
     //keep image in gpu, no need to move it
     //also keep points there
 
-    save_BlackBox_CUDA<<<num_points>>>(cudaPoints, num_points, cudaImage, width, height); 
+    n_blocks = (int)ceil(((double)num_points)/THREADSPERBLOCK); 
+
+    save_BlackBox_CUDA<<<n_blocks, THREADSPERBLOCK>>>(cudaPoints, num_points, cudaImage, width, height); 
 
     cudaMemcpy(image, cudaImage, sizeof(double) * size, cudaMemcpyDeviceToHost); //retrive image
 
@@ -425,7 +436,7 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
     //free structures
     free(image);
     
-}*/
+}
 
 void printCudaInfo() {
     int devNo = 0;
