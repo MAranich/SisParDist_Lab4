@@ -274,10 +274,9 @@ __global__ void delaunay_triangulation_CUDA(struct Point* points, int num_points
     //#pragma acc wait                                          //waits all previously queued work
 
     if(inside == 0) {                                           //if no other point is inside the triangle
-
-        atomicAdd(num_triangles, 1);                     //atomic add +1
-
+        atomicAdd(num_triangles, 1);                            //atomic add +1
         triangles[*num_triangles] = triangle_new;               //nt is updated after the assignation
+        //aqui podria haver race condition
     }
 }
 
@@ -299,7 +298,7 @@ void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Tri
     int* d_nt;                                                                                  //device num triangles
     int h_nt = -3550000;                                                                        // host num triangles //pongo este numero para detectar posibles errores
     cudaMallocManaged(&d_nt, sizeof(int));                                                      //allocate int //lo hago con el managed porque en el tuto lo hacia así. 
-    *d_nt = -1; //empieza en -1 para evitar race conditions                                                                                 //no sé si esto funciona pero estava en el tuto
+    *d_nt = -1;                                                                                  //no sé si esto funciona pero estava en el tuto
     
     dim_grid = (int)ceil(((double)totalIters)/THREADSPERBLOCK); 
     
@@ -359,7 +358,6 @@ __global__ void save_triangulation_points_CUDA(struct Point* points, int num_poi
 
     image[pixel(i, j, width)] = -1; //set deafult value
 
-
     for(int k = 0; k < *num_triangles; k++){             //recorre todos los triangulos
         tr = &triangles[k]; 
         barycentric_coordinates_CUDA(tr, &pixel, &alpha, &beta, &gamma); 
@@ -368,9 +366,6 @@ __global__ void save_triangulation_points_CUDA(struct Point* points, int num_poi
             return;                                     // podria ser un break
         }
     }
-
-
-
 }
 
 __global__ void save_BlackBox_CUDA(struct Point* points, int num_points, double* image, int width, int height) {
@@ -407,11 +402,7 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
     int size = width * height;
     double* image = (double*) malloc(sizeof(double)*size);
 
-    for(int i = 0; i < width; i++){
-        for(int j = 0; j < height; j++){
-            image[(pixel(i, j, width))] = i % 100;
-        }
-    }
+    
 
     //copy points to gpu
     struct Point* d_points;                                                                     //ptr GPU
@@ -440,7 +431,7 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
     //also keep points there
 
     dim_grid = (int)ceil(((double)num_points)/THREADSPERBLOCK); 
-
+    
     dim3 dimGrid(dim_grid);
 
     save_BlackBox_CUDA<<<dim_grid, THREADSPERBLOCK>>>(d_points, num_points, d_image, width, height); 
@@ -454,6 +445,13 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
 
     //write image
     save_image("image.txt", width, height, image);
+
+    for(int i=0; i<20; i++){
+        for(int j=0; j<20; j++){
+            printf("\t%f", image[i * width + j]);
+        }
+        printf("\n"); 
+    }
 
     //free structures
     free(image);
@@ -502,22 +500,29 @@ extern "C" int delaunay(int num_points, int width, int height) {
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds, start, stop);
     TotalTime += milliseconds; 
-    printf("Counting close points: %f\n", milliseconds/1000);
+    printf("Counting close points: %f\n", (milliseconds/1000));
 
     int num_triangles = 0;
-    //start = omp_get_wtime();
+    cudaEventRecord(start);
     delaunay_triangulation_gpu(points, num_points, triangles, &num_triangles);
-    //end = omp_get_wtime();
-    printf("Delaunay triangulation: %f\n", -1.0);
+    cudaEventRecord(stop);
+
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    TotalTime += milliseconds;
+    printf("Delaunay triangulation: %f\n", (milliseconds/1000));
 
     printf("Number of generated triangles = %d\n", num_triangles);
     //print_triangles(triangles, num_triangles);
 
-    //start = omp_get_wtime();
-    //cudaEventRecord(start);
+    cudaEventRecord(start);
     save_triangulation_image_gpu(points, num_points, triangles, num_triangles, width, height);
-    //end = omp_get_wtime();
-    printf("Generate image: %f\n", -1.0);
+    cudaEventRecord(stop);
+
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    TotalTime += milliseconds;
+    printf("Generate image: %f\n", (milliseconds/1000));
 
     //Free memory
     free(points);
