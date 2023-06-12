@@ -386,8 +386,8 @@ __global__ void save_BlackBox_CUDA(struct Point* points, int num_points, double*
 
 
 /*Wraper function to launch the CUDA kernel to compute delaunay triangulation. 
-Remember to store an image of int's between 0 and 100, where points store 101, and empty areas -1, and points inside triangle the average of value */
-
+Remember to store an image of int's between 0 and 100, where points store 101, 
+and empty areas -1, and points inside triangle the average of value */
 
 void save_triangulation_image_gpu(struct Point* points, int num_points, struct Triangle* triangles, int num_triangles, int width, int height) {
     
