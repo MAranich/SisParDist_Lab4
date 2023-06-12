@@ -144,6 +144,45 @@ __device__ double distance_CUDA(struct Point * p1, struct Point * p2) {
     return sqrt(dx*dx + dy*dy);
 }
 
+__device__ int inside_circle_CUDA(struct Point * p, struct Triangle * t) {
+//      | ax-dx, ay-dy, (ax-dx)² + (ay-dy)² |
+//det = | bx-dx, by-dy, (bx-dx)² + (by-dy)² |
+//      | cx-dx, cy-dy, (cx-dx)² + (cy-dy)² |
+
+    int clockwise = is_ccw(t);
+    
+    double ax = (*t).p1.x - (*p).x;
+    double ay = (*t).p1.y - (*p).y;
+    double bx = (*t).p2.x - (*p).x;
+    double by = (*t).p2.y - (*p).y;
+    double cx = (*t).p3.x - (*p).x;
+    double cy = (*t).p3.y - (*p).y;
+
+    double det = ax*by + bx*cy + cx*ay - ay*bx - by*cx - cy*ax;
+    det = (ax*ax + ay*ay) * (bx*cy-cx*by) -
+            (bx*bx + by*by) * (ax*cy-cx*ay) +
+            (cx*cx + cy*cy) * (ax*by-bx*ay);
+    
+    if(clockwise)
+        return det > 0;
+    return det < 0;
+}
+
+__device__ void barycentric_coordinates_CUDA(struct Triangle * t, struct Point * p, double * alpha, double * beta, double * gamma) {
+    // Compute the barycentric coordinates of the point with respect to the triangle
+    (*alpha) = (((*t).p2.y - (*t).p3.y) * ((*p).x - (*t).p3.x) + ((*t).p3.x - (*t).p2.x) * ((*p).y - (*t).p3.y)) /
+                  (((*t).p2.y - (*t).p3.y) * ((*t).p1.x - (*t).p3.x) + ((*t).p3.x - (*t).p2.x) * ((*t).p1.y - (*t).p3.y));
+    (*beta) = (((*t).p3.y - (*t).p1.y) * ((*p).x - (*t).p3.x) + ((*t).p1.x - (*t).p3.x) * ((*p).y - (*t).p3.y)) /
+                 (((*t).p2.y - (*t).p3.y) * ((*t).p1.x - (*t).p3.x) + ((*t).p3.x - (*t).p2.x) * ((*t).p1.y - (*t).p3.y));
+    (*alpha) =(*alpha) > 0 ? (*alpha) : 0;
+    (*alpha) =(*alpha) < 1 ? (*alpha) : 1;
+    (*beta) = (*beta) > 0 ? (*beta) : 0;
+    (*beta) = (*beta) < 1 ? (*beta) : 1;
+    (*gamma) = 1.0 - (*alpha) - (*beta);
+    (*gamma) = (*gamma) > 0 ? (*gamma) : 0;
+    (*gamma) = (*gamma) < 1 ? (*gamma) : 1;
+}
+
 
 /*Kernel function: to be executed on the device and launched from the host*/
 __global__ void count_close_points_CUDA(struct Point* points, int num_points) {
@@ -240,7 +279,7 @@ __global__ void delaunay_triangulation_CUDA(struct Point* points, int num_points
     
     int inside = 0;
     for(int p = 0; p < num_points; p++) {        
-        inside = inside_circle(&points[p], &triangle_new);      // result is 0 or 1 --> need to adapt it to use CUDA
+        inside = inside_circle_CUDA(&points[p], &triangle_new);      // result is 0 or 1 --> need to adapt it to use CUDA
         if(inside) break;          
     }
     //#pragma acc wait                                          //waits all previously queued work
@@ -349,13 +388,12 @@ __global__ void save_triangulation_points_CUDA(struct Point* points, int num_poi
 
     for(int k = 0; k < num_triangles; k++){             //recorre todos los triangulos
         tr = &triangles[k]; 
-        barycentric_coordinates(tr, &pixel, &alpha, &beta, &gamma); 
+        barycentric_coordinates_CUDA(tr, &pixel, &alpha, &beta, &gamma); 
         if(0 < alpha && 0 < beta && 0 < gamma){ //if inside triangle
             image[pixel(i, j, width)] = tr->p1.value * alpha + tr->p2.value * beta + tr->p3.value * gamma;   //sets new value
             break; // podria ser un return
         }
     }
-
 
 
 }
