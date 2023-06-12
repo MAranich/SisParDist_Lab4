@@ -299,7 +299,7 @@ __global__ void delaunay_triangulation_CUDA(struct Point* points, int num_points
     int inside = 0;
     for(int p = 0; p < num_points; p++) {        
         inside = inside_circle_CUDA(&points[p], &triangle_new);      // result is 0 or 1 --> need to adapt it to use CUDA
-        if(inside) break;          
+        if(inside) return;          
     }
     //#pragma acc wait                                          //waits all previously queued work
 
