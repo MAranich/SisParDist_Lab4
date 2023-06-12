@@ -275,9 +275,9 @@ __global__ void delaunay_triangulation_CUDA(struct Point* points, int num_points
 
     if(inside == 0) {                                           //if no other point is inside the triangle
 
-        triangles[*num_triangles] = triangle_new;               //nt is updated after the assignation
-        //aqui podria haver race condition
         atomicAdd(num_triangles, 1);                     //atomic add +1
+
+        triangles[*num_triangles] = triangle_new;               //nt is updated after the assignation
     }
 }
 
@@ -299,7 +299,7 @@ void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Tri
     int* d_nt;                                                                                  //device num triangles
     int h_nt = -3550000;                                                                        // host num triangles //pongo este numero para detectar posibles errores
     cudaMallocManaged(&d_nt, sizeof(int));                                                      //allocate int //lo hago con el managed porque en el tuto lo hacia así. 
-    *d_nt = 0;                                                                                  //no sé si esto funciona pero estava en el tuto
+    *d_nt = -1; //empieza en -1 para evitar race conditions                                                                                 //no sé si esto funciona pero estava en el tuto
     
     dim_grid = (int)ceil(((double)totalIters)/THREADSPERBLOCK); 
     
