@@ -407,6 +407,12 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
     int size = width * height;
     double* image = (double*) malloc(sizeof(double)*size);
 
+    for(int i = 0; i < width; i++){
+        for(int j = 0; j < height; j++){
+            image[(pixel(i, j, width))] = i % 20;
+        }
+    }
+    
     //copy points to gpu
     struct Point* d_points;                                                                     //ptr GPU
     cudaMalloc(&d_points, sizeof(struct Point) * num_points);                                   //allocate space
