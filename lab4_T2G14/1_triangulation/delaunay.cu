@@ -277,6 +277,8 @@ __global__ void delaunay_triangulation_CUDA(struct Point* points, int num_points
     triangle_new.p2 = points[j];
     triangle_new.p3 = points[k];
     
+
+
     int inside = 0;
     for(int p = 0; p < num_points; p++) {        
         inside = inside_circle_CUDA(&points[p], &triangle_new);      // result is 0 or 1 --> need to adapt it to use CUDA
@@ -496,7 +498,12 @@ void printCudaInfo() {
 extern "C" int delaunay(int num_points, int width, int height) {
     printCudaInfo();
     
-    double start, end;
+    //double start, end;
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    float milliseconds = 0;
+    float TotalTime = 0; 
 
     max_num_triangles = num_points*30;
     struct Point * points = (struct Point *) malloc(sizeof(struct Point)*num_points);
@@ -505,13 +512,16 @@ extern "C" int delaunay(int num_points, int width, int height) {
     
     init_points(points, num_points, width, height);
 
-    //start = omp_get_wtime();                            //we need to use cudaEvent
-    printf("Hi\n");
+    //we need to use cudaEvent
+    cudaEventRecord(start);
     count_close_points_gpu(points, num_points);
+    cudaEventRecord(end);
     //cudaDeviceSynchronize();
-    //end = omp_get_wtime();
     
-    printf("Counting close points: %f\n", end-start);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    TotalTime += milliseconds; 
+    printf("Counting close points: %f\n", milliseconds);
 
     printf("Some points -> point[5]: %f\n", points[5].value);
 
@@ -519,7 +529,7 @@ extern "C" int delaunay(int num_points, int width, int height) {
     //start = omp_get_wtime();
     //delaunay_triangulation_gpu(points, num_points, triangles, &num_triangles);
     //end = omp_get_wtime();
-    printf("Delaunay triangulation: %f\n", end-start);
+    printf("Delaunay triangulation: %f\n", -1.0);
 
     printf("Number of generated triangles = %d\n", num_triangles);
     //print_triangles(triangles, num_triangles);
@@ -528,7 +538,7 @@ extern "C" int delaunay(int num_points, int width, int height) {
     //cudaEventRecord(start);
     //save_triangulation_image_gpu(points, num_points, triangles, num_triangles, width, height);
     //end = omp_get_wtime();
-    printf("Generate image: %f\n", end-start);
+    printf("Generate image: %f\n", -1.0);
 
     //Free memory
     free(points);
