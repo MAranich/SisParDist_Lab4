@@ -441,6 +441,8 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
 
     dim_grid = (int)ceil(((double)num_points)/THREADSPERBLOCK); 
 
+    dim3 dimGrid(dim_grid);
+
     save_BlackBox_CUDA<<<dim_grid, THREADSPERBLOCK>>>(d_points, num_points, d_image, width, height); 
 
     cudaMemcpy(image, d_image, sizeof(double) * size, cudaMemcpyDeviceToHost); //retrive image
@@ -500,7 +502,7 @@ extern "C" int delaunay(int num_points, int width, int height) {
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds, start, stop);
     TotalTime += milliseconds; 
-    printf("Counting close points: %f\n", milliseconds);
+    printf("Counting close points: %f\n", milliseconds/1000);
 
     int num_triangles = 0;
     //start = omp_get_wtime();
