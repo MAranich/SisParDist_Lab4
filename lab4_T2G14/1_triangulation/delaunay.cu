@@ -355,7 +355,6 @@ void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Tri
 
 
     cudaMemcpy(&h_nt, d_nt, sizeof(int), cudaMemcpyDeviceToHost);                               ////data transfer GPU -> CPU
-    //h_nt++; 
 
     //no need to retrive points since they are not affected
     cudaMemcpy(triangles, d_triangles, sizeof(struct Triangle) * h_nt, cudaMemcpyDeviceToHost); //retrive only the necessary triangles
@@ -382,7 +381,7 @@ void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Tri
 }
 
 
-__global__ void save_triangulation_points_CUDA(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles, double* image, int width, int height) {
+__global__ void save_triangulation_points_CUDA(struct Point* points, int num_points, struct Triangle* triangles, int num_triangles, double* image, int width, int height) {
     
     int id = threadIdx.x + blockIdx.x * blockDim.x; //get position of pixel
     
@@ -404,7 +403,7 @@ __global__ void save_triangulation_points_CUDA(struct Point* points, int num_poi
 
     image[pixel(i, j, width)] = -1; //set deafult value
 
-    for(int k = 0; k < *num_triangles; k++){             //recorre todos los triangulos
+    for(int k = 0; k < num_triangles; k++){             //recorre todos los triangulos
         tr = &triangles[k]; 
         barycentric_coordinates_CUDA(tr, &pixel, &alpha, &beta, &gamma); 
         if(0 < alpha && 0 < beta && 0 < gamma){ //if inside triangle
@@ -460,7 +459,7 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
     cudaMalloc(&d_triangles, sizeof(struct Triangle) * num_triangles);                                      //allocate space
     cudaMemcpy(d_triangles, triangles, sizeof(struct Triangle) * num_triangles, cudaMemcpyHostToDevice);    //data transfer
 
-    double* d_image; //ptr GPU
+    double* d_image;                                                                //ptr GPU
     cudaMalloc(&d_image, sizeof(double) * size);                                    //allocate space
     //data created in gpu
 
@@ -470,7 +469,7 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
     dim3 dimGrid1(dim_grid);
     dim3 dimBlock1(THREADSPERBLOCK);
 
-    save_triangulation_points_CUDA<<<dimGrid1, dimBlock1>>> (d_points, num_points, d_triangles, &num_triangles, d_image, width, height);                                
+    save_triangulation_points_CUDA<<<dimGrid1, dimBlock1>>> (d_points, num_points, d_triangles, num_triangles, d_image, width, height);                                
     cudaDeviceSynchronize();
 
     //wait for next kernel
