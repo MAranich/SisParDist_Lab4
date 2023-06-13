@@ -131,6 +131,7 @@ void init_points(struct Point* points, int num_points, int width, int height) {
     }
 }
 
+/*SEQUENTIAL functions*/
 void count_close_points(struct Point* points, int num_points) {
     //double dis = 0;
 
@@ -175,18 +176,75 @@ void delaunay_triangulation(struct Point* points, int num_points, struct Triangl
 
 }
 
+/* Function to store an image of int's between 0 and 100, where points store -1, and empty areas -2, 
+and points inside triangle the average value */
+void save_triangulation_image(struct Point* points, int num_points, struct Triangle* triangles, int num_triangles, int width, int height) {
+    int size = width * height;
+    struct Point pixel, *point;
+    struct Triangle* tr = NULL; 
+    double disx, disy;
+    double alpha, beta, gamma;
+    double* image = (double*) malloc(sizeof(double)*size);
+    int inside = 0;    
+    
+    pixel.value = 0;
+
+
+    for(int j = 0; j < height; j++){ 
+
+        pixel.y = (double)j;
+
+        for(int i = 0; i < width; i++){            //por cada pixel
+            pixel.x = (double)i;
+
+            image[pixel(i, j, width)] = -1;                    //init pixel
+            //pixel falls within a triangle?
+            for(int k = 0; k < num_triangles; k++){             //recorre todos los triangulos
+                tr = &triangles[k]; 
+                inside = inside_triangle(tr, &pixel);
+                if(inside){
+                    barycentric_coordinates(tr, &pixel, &alpha, &beta, &gamma); 
+                    image[pixel(i, j, width)] = tr->p1.value * alpha + tr->p2.value * beta + tr->p3.value * gamma;   //sets new value
+                    break;
+                }
+            }
+
+            //square of size 5
+            for(int k = 0; k < num_points; k++) { //overrides previous decision if necessary
+                point = &points[k];
+                disx = abs(point->x - pixel.x);
+                disy = abs(point->y - pixel.y);
+
+                //printf("The distances are: %lf and %lf. So:%d \n", disx, disy, disx<=2.5);
+                if(disx <= 2.5 && disy <= 2.5) {             //pixel is inside square
+                    image[(pixel(i, j, width))] = 101.0;
+                    break;
+                }
+            }
+        }
+           
+    }
+    //write image
+    save_image("image.txt", width, height, image);
+    
+    //printf("Abracadabra. \n"); 
+
+    //free memory
+    free(image);      
+}
+
 /////////////////////////////////////////////
 ///
 ///         CUDA part
 ///
 /////////////////////////////////////////////
 
+//device functions
 __device__ double distance_CUDA(struct Point * p1, struct Point * p2) {
     double dx = (*p1).x - (*p2).x;
     double dy = (*p1).y - (*p2).y;
     return sqrt(dx*dx + dy*dy);
 }
-
 
 __device__ int is_ccw_CUDA(struct Triangle * t) {
     double ax = (*t).p2.x - (*t).p1.x;
@@ -197,6 +255,7 @@ __device__ int is_ccw_CUDA(struct Triangle * t) {
     double area = ax * by - ay * bx;
     return area > 0;
 }
+
 __device__ int inside_circle_CUDA(struct Point * p, struct Triangle * t) {
 //      | ax-dx, ay-dy, (ax-dx)² + (ay-dy)² |
 //det = | bx-dx, by-dy, (bx-dx)² + (by-dy)² |
@@ -237,9 +296,10 @@ __device__ void barycentric_coordinates_CUDA(struct Triangle * t, struct Point *
     (*gamma) = (*gamma) < 1 ? (*gamma) : 1;
 }
 
+    /*COUNT CLOSE POINTS*/
 /*Kernel function: to be executed on the device and launched from the host*/
 __global__ void count_close_points_CUDA(struct Point* points, int num_points) {
-    int id = threadIdx.x + blockIdx.x * blockDim.x; // get gloval iter
+    int id = threadIdx.x + blockIdx.x * blockDim.x;                             // get gloval iter
 
     if(id >= num_points * num_points) return; 
 
@@ -281,7 +341,8 @@ void count_close_points_gpu(struct Point* points, int num_points) {
     dim3 dimGrid(dim_grid);
     dim3 dimBlock(THREADSPERBLOCK);
 
-    count_close_points_CUDA<<<dim_grid, THREADSPERBLOCK>>>(d_points, num_points);                     //(dimGrid, dimBlock) we want to iterate over every pair
+    //mejor dimGrid que dim_grid(?)
+    count_close_points_CUDA<<<dimGrid, THREADSPERBLOCK>>>(d_points, num_points);                     //(dimGrid, dimBlock) we want to iterate over every pair
     cudaDeviceSynchronize();
 
     cudaMemcpy(points, d_points, sizeof(struct Point) * num_points, cudaMemcpyDeviceToHost);          //we transfer it from GPU -> CPU
@@ -292,6 +353,7 @@ void count_close_points_gpu(struct Point* points, int num_points) {
 }
 
 
+    /*DELAUNAY TRIANGULATION*/
 __global__ void delaunay_triangulation_CUDA(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles) {
     int aux;
 
@@ -355,6 +417,7 @@ void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Tri
 
 
     cudaMemcpy(&h_nt, d_nt, sizeof(int), cudaMemcpyDeviceToHost);                               ////data transfer GPU -> CPU
+    //h_nt++; 
 
     //no need to retrive points since they are not affected
     cudaMemcpy(triangles, d_triangles, sizeof(struct Triangle) * h_nt, cudaMemcpyDeviceToHost); //retrive only the necessary triangles
@@ -380,8 +443,8 @@ void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Tri
 
 }
 
-
-__global__ void save_triangulation_points_CUDA(struct Point* points, int num_points, struct Triangle* triangles, int num_triangles, double* image, int width, int height) {
+    /*SAVE TRIANGULATION IMAGE*/
+__global__ void save_points_CUDA(struct Point* points, int num_points, struct Triangle* triangles, int num_triangles, double* image, int width, int height) {
     
     int id = threadIdx.x + blockIdx.x * blockDim.x; //get position of pixel
     
@@ -437,11 +500,9 @@ __global__ void save_BlackBox_CUDA(struct Point* points, int num_points, double*
 }
 
 
-
 /*Wraper function to launch the CUDA kernel to compute delaunay triangulation. 
 Remember to store an image of int's between 0 and 100, where points store 101, 
 and empty areas -1, and points inside triangle the average of value */
-
 void save_triangulation_image_gpu(struct Point* points, int num_points, struct Triangle* triangles, int num_triangles, int width, int height) {
     //create structures
     int size = width * height;
@@ -459,7 +520,7 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
     cudaMalloc(&d_triangles, sizeof(struct Triangle) * num_triangles);                                      //allocate space
     cudaMemcpy(d_triangles, triangles, sizeof(struct Triangle) * num_triangles, cudaMemcpyHostToDevice);    //data transfer
 
-    double* d_image;                                                                //ptr GPU
+    double* d_image; //ptr GPU
     cudaMalloc(&d_image, sizeof(double) * size);                                    //allocate space
     //data created in gpu
 
@@ -469,7 +530,7 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
     dim3 dimGrid1(dim_grid);
     dim3 dimBlock1(THREADSPERBLOCK);
 
-    save_triangulation_points_CUDA<<<dimGrid1, dimBlock1>>> (d_points, num_points, d_triangles, num_triangles, d_image, width, height);                                
+    save_points_CUDA<<<dimGrid1, dimBlock1>>> (d_points, num_points, d_triangles, num_triangles, d_image, width, height);                                
     cudaDeviceSynchronize();
 
     //wait for next kernel
@@ -505,64 +566,6 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
     free(image);
     
 }
-
-/* Function to store an image of int's between 0 and 100, where points store -1, and empty areas -2, 
-and points inside triangle the average value */
-void save_triangulation_image(struct Point* points, int num_points, struct Triangle* triangles, int num_triangles, int width, int height) {
-    int size = width * height;
-    struct Point pixel, *point;
-    struct Triangle* tr = NULL; 
-    double disx, disy;
-    double alpha, beta, gamma;
-    double* image = (double*) malloc(sizeof(double)*size);
-    int inside = 0;    
-    
-    pixel.value = 0;
-
-
-    for(int j = 0; j < height; j++){ 
-
-        pixel.y = (double)j;
-
-        for(int i = 0; i < width; i++){            //por cada pixel
-            pixel.x = (double)i;
-
-            image[pixel(i, j, width)] = -1;                    //init pixel
-            //pixel falls within a triangle?
-            for(int k = 0; k < num_triangles; k++){             //recorre todos los triangulos
-                tr = &triangles[k]; 
-                inside = inside_triangle(tr, &pixel);
-                if(inside){
-                    barycentric_coordinates(tr, &pixel, &alpha, &beta, &gamma); 
-                    image[pixel(i, j, width)] = tr->p1.value * alpha + tr->p2.value * beta + tr->p3.value * gamma;   //sets new value
-                    break;
-                }
-            }
-
-            //square of size 5
-            for(int k = 0; k < num_points; k++) { //overrides previous decision if necessary
-                point = &points[k];
-                disx = abs(point->x - pixel.x);
-                disy = abs(point->y - pixel.y);
-
-                //printf("The distances are: %lf and %lf. So:%d \n", disx, disy, disx<=2.5);
-                if(disx <= 2.5 && disy <= 2.5) {             //pixel is inside square
-                    image[(pixel(i, j, width))] = 101.0;
-                    break;
-                }
-            }
-        }
-           
-    }
-    //write image
-    save_image("image.txt", width, height, image);
-    
-    //printf("Abracadabra. \n"); 
-
-    //free memory
-    free(image);      
-}
-
 
 
 void printCudaInfo() {
