@@ -527,10 +527,10 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
     //usamos un thread en la gpu por pixel
     int dim_grid = (int)ceil(((double)size)/THREADSPERBLOCK);                       //num of blocks
 
-    dim3 dimGrid1(dim_grid);
+    //dim3 dimGrid1(dim_grid);
     dim3 dimBlock1(THREADSPERBLOCK);
 
-    save_points_CUDA<<<dimGrid1, dimBlock1>>> (d_points, num_points, d_triangles, num_triangles, d_image, width, height);                                
+    save_points_CUDA<<<dim_grid, dimBlock1>>> (d_points, num_points, d_triangles, num_triangles, d_image, width, height);                                
     cudaDeviceSynchronize();
 
     //wait for next kernel
@@ -539,10 +539,10 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
 
     dim_grid = (int)ceil(((double)num_points)/THREADSPERBLOCK); 
     
-    dim3 dimGrid2(dim_grid);
-    dim3 dimBlock2(THREADSPERBLOCK);
+    //dim3 dimGrid2(dim_grid);
+    //dim3 dimBlock2(THREADSPERBLOCK);
 
-    save_BlackBox_CUDA<<<dimGrid2, dimBlock2>>> (d_points, num_points, d_image, width, height); 
+    save_BlackBox_CUDA<<<dim_grid, dimBlock1>>> (d_points, num_points, d_image, width, height); 
     cudaDeviceSynchronize();
 
     cudaMemcpy(image, d_image, sizeof(double) * size, cudaMemcpyDeviceToHost); //retrive image
