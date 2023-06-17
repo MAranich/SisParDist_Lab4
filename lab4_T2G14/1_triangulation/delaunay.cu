@@ -365,7 +365,7 @@ __global__ void delaunay_triangulation_CUDA(struct Point* points, int num_points
     int j = (n_totalIter / num_points) % num_points;
     int k = n_totalIter % num_points; 
 
-    if( !( i < j && j < k ) ) return; //if the conditions are NOT met, end thread
+    if( !( i < j && j < k ) ) return;                           //if the conditions are NOT met, end thread
     //calculate triangle
     struct Triangle triangle_new;
 
@@ -378,10 +378,10 @@ __global__ void delaunay_triangulation_CUDA(struct Point* points, int num_points
         inside += inside_circle_CUDA(&points[p], &triangle_new);      // result is 0 or 1 --> need to adapt it to use CUDA
         //if(inside) break;          
     }
-    //#pragma acc wait                                          //waits all previously queued work
-    if(inside == 0) {                                           //if no other point is inside the triangle
-        aux = atomicAdd(num_triangles, 1);                            //atomic add +1
-        triangles[aux] = triangle_new;               //nt is updated after the assignation
+    //#pragma acc wait                                                  //waits all previously queued work
+    if(inside == 0) {                                                   //if no other point is inside the triangle
+        aux = atomicAdd(num_triangles, 1);                              //atomic add +1
+        triangles[aux] = triangle_new;                                  //nt is updated after the assignation
         //aqui podria haver race condition
     }
 }
@@ -416,7 +416,7 @@ void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Tri
     cudaDeviceSynchronize();
 
 
-    cudaMemcpy(&h_nt, d_nt, sizeof(int), cudaMemcpyDeviceToHost);                               ////data transfer GPU -> CPU
+    cudaMemcpy(num_triangles, d_nt, sizeof(int), cudaMemcpyDeviceToHost);                               ////data transfer GPU -> CPU
     //h_nt++; 
 
     //no need to retrive points since they are not affected
@@ -426,20 +426,6 @@ void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Tri
     cudaFree(d_points);
     cudaFree(d_triangles);
     cudaFree(d_nt);
-
-
-    // //Display some info and print some of the triangles //delete later
-    // if(0 <= h_nt){
-    //     int rnd = 5; //bad pseudoransom number generator
-    //     printf("delaunay_triangulation_gpu finalized. Created %d triangles (neg number = error) \n", *num_triangles)
-    //     for(rnd = 5; rnd < *num_triangles; rnd += 20 + (rnd * 73)%29) { //print some of the triangles
-    //         printf("Triangle %d : [(%lf, %lf) (%lf, %lf) (%lf, %lf)] \n", rnd
-    //         triangles[rnd].p1.x, triangles[rnd].p1.y,
-    //         triangles[rnd].p2.x, triangles[rnd].p2.y,
-    //         triangles[rnd].p3.x, triangles[rnd].p3.y);   
-    //     }
-    // } else printf("There has been an error with d_nt or h_nt variables. h_nt = %d \n", h_nt); 
-
 
 }
 
@@ -525,21 +511,23 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
     //usamos un thread en la gpu por pixel
     int dim_grid = (int)ceil(((double)size)/THREADSPERBLOCK);                       //num of blocks
 
+    
     dim3 dimGrid(dim_grid);
     dim3 dimBlock(THREADSPERBLOCK);
 
     save_points_CUDA<<<dimGrid, dimBlock>>> (d_triangles, num_triangles, d_image, width, height);                                
     cudaDeviceSynchronize();
+    
 
     //wait for next kernel
     //keep image in gpu, no need to move it
     //also keep points there
     dim_grid = (int)ceil(((double)num_points)/THREADSPERBLOCK); 
     
-    // dimGrid(dim_grid);
+    dimGrid(dim_grid);
     // dimBlock(THREADSPERBLOCK);
 
-    save_BlackBox_CUDA<<<dim_grid, THREADSPERBLOCK>>> (d_points, num_points, d_image, width, height); 
+    save_BlackBox_CUDA<<<dimGrid, THREADSPERBLOCK>>> (d_points, num_points, d_image, width, height); 
     cudaDeviceSynchronize();
 
     cudaMemcpy(image, d_image, sizeof(double) * size, cudaMemcpyDeviceToHost); //retrive image
@@ -609,7 +597,7 @@ extern "C" int delaunay(int num_points, int width, int height) {
 
     int num_triangles = 0;
     cudaEventRecord(start);
-    delaunay_triangulation_gpu(points, num_points, triangles, &num_triangles);
+    delaunay_triangulation(points, num_points, triangles, &num_triangles);
     cudaEventRecord(stop);
 
     cudaEventSynchronize(stop);
