@@ -623,6 +623,7 @@ extern "C" int delaunay(int num_points, int width, int height) {
     cudaEventElapsedTime(&milliseconds, start, stop);
     TotalTime += milliseconds;
     printf("Generate image: %f\n", (milliseconds/1000));
+    printf("Total time: %f\n", (TotalTime/1000));
 
     //Free memory
     free(points);
