@@ -354,7 +354,7 @@ void count_close_points_gpu(struct Point* points, int num_points) {
 }
 
 
-    /*DELAUNAY TRIANGULATION*/
+/*DELAUNAY TRIANGULATION*/
 __global__ void delaunay_triangulation_CUDA(struct Point* points, int num_points, struct Triangle* triangles, int* num_triangles) {
     int aux;
 
@@ -431,7 +431,7 @@ void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Tri
 
 }
 
-    /*SAVE TRIANGULATION IMAGE*/
+/*SAVE TRIANGULATION IMAGE*/
 __global__ void save_points_CUDA(struct Triangle* triangles, int num_triangles, double* image, int width, int height) {
     
     int id = threadIdx.x + blockIdx.x * blockDim.x; //get position of pixel
@@ -513,24 +513,29 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
     //usamos un thread en la gpu por pixel
     int dim_grid = (int)ceil(((double)size)/THREADSPERBLOCK);                       //num of blocks
 
-    
-    dim3 dimGrid(dim_grid);
-    dim3 dimBlock(THREADSPERBLOCK);
+    {
+        dim3 dimGrid(dim_grid);
+        dim3 dimBlock(THREADSPERBLOCK);
 
-    save_points_CUDA<<<dimGrid, dimBlock>>> (d_triangles, num_triangles, d_image, width, height);                                
-    cudaDeviceSynchronize();
+        save_points_CUDA<<<dimGrid, dimBlock>>> (d_triangles, num_triangles, d_image, width, height);                                
+        cudaDeviceSynchronize(); //wait to finish
+    }
+
     
 
+    {
+        dim_grid = (int)ceil(((double)num_points)/THREADSPERBLOCK); 
+
+        dim3 dimGrid(dim_grid);
+        // dimBlock(THREADSPERBLOCK);
+
+        save_BlackBox_CUDA<<<dimGrid, THREADSPERBLOCK>>> (d_points, num_points, d_image, width, height); 
+        cudaDeviceSynchronize(); //wait to finish
+
+    }
     //wait for next kernel
     //keep image in gpu, no need to move it
     //also keep points there
-    dim_grid = (int)ceil(((double)num_points)/THREADSPERBLOCK); 
-    
-    dimGrid(dim_grid);
-    // dimBlock(THREADSPERBLOCK);
-
-    save_BlackBox_CUDA<<<dimGrid, THREADSPERBLOCK>>> (d_points, num_points, d_image, width, height); 
-    cudaDeviceSynchronize();
 
     cudaMemcpy(image, d_image, sizeof(double) * size, cudaMemcpyDeviceToHost); //retrive image
 
