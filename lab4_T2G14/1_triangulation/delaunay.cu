@@ -165,7 +165,8 @@ void delaunay_triangulation(struct Point* points, int num_points, struct Triangl
                     inside = inside_circle(&points[p], &triangle_new); // result is 0 or 1
                     if(inside) break;
                 }
-
+                
+                #pragma acc wait
                 if(inside == 0) { //if no other point is inside the triangle
                     triangles[*num_triangles] = triangle_new; 
                     (*num_triangles)++;                 //update the counter
@@ -378,7 +379,8 @@ __global__ void delaunay_triangulation_CUDA(struct Point* points, int num_points
         inside += inside_circle_CUDA(&points[p], &triangle_new);      // result is 0 or 1 --> need to adapt it to use CUDA
         //if(inside) break;          
     }
-    //#pragma acc wait                                                  //waits all previously queued work
+    
+    __syncthreads();
     if(inside == 0) {                                                   //if no other point is inside the triangle
         aux = atomicAdd(num_triangles, 1);                              //atomic add +1
         triangles[aux] = triangle_new;                                  //nt is updated after the assignation
