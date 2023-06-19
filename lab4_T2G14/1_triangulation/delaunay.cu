@@ -384,7 +384,6 @@ __global__ void delaunay_triangulation_CUDA(struct Point* points, int num_points
     if(inside == 0) {                                                   //if no other point is inside the triangle
         aux = atomicAdd(num_triangles, 1);                              //atomic add +1
         triangles[aux] = triangle_new;                                  //nt is updated after the assignation
-        //aqui podria haver race condition
     }
 }
 
@@ -412,7 +411,6 @@ void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Tri
     
     dim3 dimGrid(dim_grid);
     dim3 dimBlock(THREADSPERBLOCK);
-
 
     delaunay_triangulation_CUDA<<<dimGrid, dimBlock>>>(d_points, num_points, d_triangles, d_nt);      //entiendo que falta el block_size(?)
     cudaDeviceSynchronize();
@@ -476,7 +474,6 @@ __global__ void save_BlackBox_CUDA(struct Point* points, int num_points, double*
     int radius = 2; // Total size = (2 * radius + 1)^2
 
     //square of size 5
-
     for(int i = _x - radius;  i <= _x + radius; i++) { //in a box
         for(int j = _y - radius; j <= _y + radius; j++) {
             if(0 <= i && 0 <= j && i < width && j < height) { //if possible
@@ -506,12 +503,12 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
     cudaMalloc(&d_triangles, sizeof(struct Triangle) * num_triangles);                                      //allocate space
     cudaMemcpy(d_triangles, triangles, sizeof(struct Triangle) * num_triangles, cudaMemcpyHostToDevice);    //data transfer
 
-    double* d_image; //ptr GPU
+    double* d_image;                                                                //ptr GPU
     cudaMalloc(&d_image, sizeof(double) * size);                                    //allocate space
-    //data created in gpu
 
-    //usamos un thread en la gpu por pixel
+    //we use one thread per pixel
     int dim_grid = (int)ceil(((double)size)/THREADSPERBLOCK);                       //num of blocks
+
 
     {
         dim3 dimGrid(dim_grid);
@@ -527,9 +524,9 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
         dim_grid = (int)ceil(((double)num_points)/THREADSPERBLOCK); 
 
         dim3 dimGrid(dim_grid);
-        // dimBlock(THREADSPERBLOCK);
+        dim3 dimBlock(THREADSPERBLOCK);
 
-        save_BlackBox_CUDA<<<dimGrid, THREADSPERBLOCK>>> (d_points, num_points, d_image, width, height); 
+        save_BlackBox_CUDA<<<dimGrid, dimBlock>>> (d_points, num_points, d_image, width, height); 
         cudaDeviceSynchronize(); //wait to finish
 
     }
@@ -545,13 +542,6 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
 
     //write image
     save_image("image.txt", width, height, image);
-
-    // for(int i=0; i<20; i++){
-    //     for(int j=0; j<20; j++){
-    //         printf("\t%f", image[i * width + j]);
-    //     }
-    //     printf("\n"); 
-    // }
 
     //free structures
     free(image);
