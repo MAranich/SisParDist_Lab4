@@ -436,8 +436,10 @@ __global__ void save_points_CUDA(struct Triangle* triangles, int num_triangles, 
     
     if(width * height <= id) return; 
 
-    int i = id / width;                             //get i and j
-    int j = id % width; 
+    int size = width*height;
+
+    int i = id / size;                             //get i and j
+    int j = id % size; 
 
     //declare vars
     //int inside = 0;
