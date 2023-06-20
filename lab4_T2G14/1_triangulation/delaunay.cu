@@ -109,15 +109,15 @@ int inside_triangle(struct Triangle * t, struct Point * p) {
 /* Helper function to save an image */   
 void save_image(char const * filename, int width, int height, double *image){
 
-   FILE *fp=NULL;
-   fp = fopen(filename,"w");
-   for(int j=0; j<height; ++j){
-      for(int i=0; i<width; ++i){
-         fprintf(fp,"%f ", image[pixel(i,j,width)]);      
-      }
-      fprintf(fp,"\n");
-   }
-   fclose(fp);
+    FILE *fp=NULL;
+    fp = fopen(filename,"w");
+    for(int j = 0; j < height; ++j){
+        for(int i = 0; i < width; ++i){
+            fprintf(fp,"%f ", image[pixel(i,j,width)]);      
+        }
+        fprintf(fp,"\n");
+    }
+    fclose(fp);
 
 }
 
@@ -436,10 +436,10 @@ __global__ void save_points_CUDA(struct Triangle* triangles, int num_triangles, 
     
     if(width * height <= id) return; 
 
-    int size = width*height;
+    //int size = width*height;
 
-    int i = id / size;                             //get i and j
-    int j = id % size; 
+    int i = id % width;                             //get i and j
+    int j = id / width; 
 
     //declare vars
     //int inside = 0;
@@ -452,13 +452,14 @@ __global__ void save_points_CUDA(struct Triangle* triangles, int num_triangles, 
     pixel.y = (double)j; 
     pixel.value = 0.0;
 
-    image[pixel(i, j, width)] = -1; //set deafult value
+    int pos = pixel(i, j, width); 
+    image[pos] = -1; //set deafult value
 
     for(int k = 0; k < num_triangles; k++){             //recorre todos los triangulos
         tr = &triangles[k]; 
         barycentric_coordinates_CUDA(tr, &pixel, &alpha, &beta, &gamma); 
         if(0 < alpha && 0 < beta && 0 < gamma){ //if inside triangle
-            image[pixel(i, j, width)] = tr->p1.value * alpha + tr->p2.value * beta + tr->p3.value * gamma;   //sets new value
+            image[pos] = tr->p1.value * alpha + tr->p2.value * beta + tr->p3.value * gamma;   //sets new value
             return;                                     // podria ser un break
         }
     }
