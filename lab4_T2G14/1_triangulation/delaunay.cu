@@ -307,9 +307,6 @@ __global__ void count_close_points_CUDA(struct Point* points, int num_points) {
     int i = (id / num_points); 
     int j = id%num_points; 
 
-    //printf("ThreadIdx: %d --- BlockIdx:%d  --- BlockDim:%d\n", threadIdx.x, blockIdx.x, blockDim.x);
-    //printf("Indexes: i:%d and j:%d, total iter: %d = %d\n", i, j, id, i * num_points + j);
-
     if( !(i < j) ) return; 
 
     double dis = distance_CUDA(&points[i], &points[j]);
@@ -342,7 +339,6 @@ void count_close_points_gpu(struct Point* points, int num_points) {
     dim3 dimGrid(dim_grid);
     dim3 dimBlock(THREADSPERBLOCK);
 
-    //mejor dimGrid que dim_grid(?)
     count_close_points_CUDA<<<dimGrid, dimBlock>>>(d_points, num_points);                     //(dimGrid, dimBlock) we want to iterate over every pair
     cudaDeviceSynchronize();
 
@@ -415,9 +411,7 @@ void delaunay_triangulation_gpu(struct Point* points, int num_points, struct Tri
     delaunay_triangulation_CUDA<<<dimGrid, dimBlock>>>(d_points, num_points, d_triangles, d_nt);      //entiendo que falta el block_size(?)
     cudaDeviceSynchronize();
 
-
     cudaMemcpy(num_triangles, d_nt, sizeof(int), cudaMemcpyDeviceToHost);                               ////data transfer GPU -> CPU
-    //h_nt++; 
 
     //no need to retrive points since they are not affected
     cudaMemcpy(triangles, d_triangles, sizeof(struct Triangle) * h_nt, cudaMemcpyDeviceToHost); //retrive only the necessary triangles
@@ -436,15 +430,11 @@ __global__ void save_points_CUDA(struct Triangle* triangles, int num_triangles, 
     
     if(width * height <= id) return; 
 
-    //int size = width*height;
-
     int i = id % width;                             //get i and j
     int j = id / width; 
 
     //declare vars
-    //int inside = 0;
     struct Point pixel; 
-    //struct Point* point;
     struct Triangle* tr = NULL; 
     double alpha, beta, gamma;
 
@@ -521,7 +511,6 @@ void save_triangulation_image_gpu(struct Point* points, int num_points, struct T
         cudaDeviceSynchronize(); //wait to finish
     }
 
-    
 
     {
         dim_grid = (int)ceil(((double)num_points)/THREADSPERBLOCK); 
